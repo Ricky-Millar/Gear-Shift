@@ -1,0 +1,168 @@
+/*LED
+a = 13
+b = 12
+c = 11
+d = 10
+e = 9
+f = 8
+g = 7  i wanted to right straight to registers but it didnt seem to work so im using loops
+*/
+int LEDCLEAR[7] = {7,8,9,10,11,12,13};
+int LEDN[3] = {9,7,11};
+int LED1[2]  = {12,11};
+int LED2[5]  = {13,12,7,9,10};
+int LED3[5]  = {12,13,7,11,10};
+int LED4[4]  = {8,12,7,11};
+int LED5[5]  = {13,8,7,11,10};
+int LED6[6]  = {13,8,9,11,10,7};
+
+
+ unsigned char i;
+int upstate = 0;
+int downstate = 0
+;const int down = 2;
+const int up = 3;
+int gear = 0;
+int led = 13;
+int bananas = 0;
+
+float Gratio = 5/7;
+int G0 = 188;
+int G1 =  0;
+int G2 = 375;
+int G3 = 750;
+int G4 = 1125;
+int G5 = 1500;
+int G6 = 1875;
+
+const int StepPerShift = 1800/6;
+
+const int buttonPin = 2;    // the number of the pushbutton pin
+const int ledPin = 13;      // the number of the LED pin
+
+// Variables will change:
+int ledState = LOW;         // the current state of the output pin
+int buttonState;             // the current reading from the input pin
+int lastButtonState = LOW;   // the previous reading from the input pin
+
+// the following variables are unsigned long's because the time, measured in miliseconds,
+// will quickly become a bigger number than can be stored in an int.
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
+void setup() {
+
+  Serial.begin(9600);    //Initiate serial port
+//Serial.println(G0); Serial.println(G1); Serial.println(G2); Serial.println(G3); Serial.println(G4); Serial.println(G5); Serial.println(G6);  
+ 
+  delay(3000);
+
+         pinMode(down, INPUT_PULLUP);
+pinMode(up, INPUT_PULLUP); //Wait for motor to finish initiation routine - If you give commands to motor on power on it may behave irratically
+          pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(ledPin, OUTPUT);
+  pinMode(led, OUTPUT);    //Setup LED pin as output
+
+  
+  Serial.println("X");    //Auto Calibration command, Required only once when using motor for the first time, after running onces parameters are stored in motor controller.
+  delay(5000);            //Wait for 5 Seconds for calibration
+  
+  Serial.println("E125");    //Set I2C slave address for motor. If more than one motor is to be controlled on I2C bus every motor needs different address which can be set using this command. 
+                             //Required only once when using motor for the first time, after running onces parameters are stored in motor controller.
+  delay(500);                //Allow to store setting
+  
+  
+  digitalWrite(led, 0);
+  Serial.println("M255");  //Set maximum speed of motor, useful when using G command for going to specific encoder position.
+  delay(500);              //Allow to store setting
+  Serial.println("D0");  //Set damping - acceleration and decceleration
+  delay(500);              //Allow to store setting
+}
+void loop() {
+
+upstate = digitalRead(up);
+downstate = digitalRead(down);
+
+//if (digitalRead(up) == LOW)
+//(digital
+  
+  switch(gear)
+  {
+    //Neutral
+    case 0:
+    if (bananas ==0) {
+     Serial.print("P");
+     Serial.println(G0);    //Set current encoder position as 0
+     //LEDNeutral();
+    }bananas =1;
+
+   if (digitalRead(up) == LOW) {
+   gear = 1;  Serial.print("G");Serial.println(-G1);
+  delay(200);upstate = 0; bananas = 0;
+  
+   } break;
+//First
+   case 1: 
+   if (digitalRead(up) == LOW) {
+   gear = 2;  Serial.print("G");Serial.println(-G2);
+     delay(200);break;
+   }
+   else if (digitalRead(down) == LOW) {
+   gear = 0;  Serial.print("G");Serial.println(-G0);
+
+     delay(200);
+   }break;
+//Second
+      case 2: 
+   if (digitalRead(up) == LOW) {
+   gear = 3;  Serial.print("G");Serial.println(-G3);
+     delay(200);break;
+   }
+   else if (digitalRead(down) == LOW) {
+   gear = 1;  Serial.print("G");Serial.println(G1);
+        delay(200);
+   }break;
+//Third
+      case 3:  
+      PORTB |= B111111;
+      PORTB = B111111;
+   if (digitalRead(up) == LOW) {
+   gear = 4;  Serial.print("G");Serial.println(-G4);
+     delay(200);break;
+   }
+   else if (digitalRead(down) == LOW) {
+   gear = 2;  Serial.print("G");Serial.println(-G2);
+   
+     delay(200);
+   }break;
+//Fourth
+      case 4: 
+   if (digitalRead(up) == LOW) {
+   gear = 5;  Serial.print("G");Serial.println(-G5);
+     delay(200); break;
+   }
+   else if (digitalRead(down) == LOW) {
+   gear = 3;  Serial.print("G");Serial.println(-G3);
+     delay(200);
+   }break;
+//Fith
+      case 5: 
+   if (digitalRead(up) == LOW) {
+   gear = 6;  Serial.print("G");Serial.println(-G6);
+     delay(200);break;
+   }
+   else if (digitalRead(down) == LOW) {
+   gear = 4;  Serial.print("G");Serial.println(-G4);
+     delay(200);
+   }break;
+//sixth
+      case 6: 
+   if (digitalRead(down) == LOW) {
+   gear = 5;  Serial.print("G");Serial.println(-G5);
+     delay(200);
+   }break;
+  
+}}
+
+
+
