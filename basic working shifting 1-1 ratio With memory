@@ -1,4 +1,4 @@
-
+#include <EEPROM.h>
 int incomingByte;
 int n;
 unsigned char i;
@@ -21,9 +21,11 @@ int G6 = 1875;
 int neutral;
 
 
+
 void setup() {
   Serial.begin(9600);
   gear =  EEPROM.read(1);
+  if (gear>6)gear=0;
   pinMode(down, INPUT_PULLUP);
   pinMode(up, INPUT_PULLUP);
   pinMode(buttonPin, INPUT_PULLUP);
@@ -45,7 +47,7 @@ void loop() {
   downstate = digitalRead(down);
  
 //Check If neutral button has been pressed for a time
-switch (Neutralstate) 
+switch (neutral) 
 {
  case 0:
     if (digitalRead(9))
