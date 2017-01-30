@@ -1,0 +1,134 @@
+#include <EEPROM.h>
+int incomingByte;
+long n;
+unsigned char i;
+int upstate = 0;
+int downstate = 0;
+const int down = 2;
+const int up = 3;
+const int StepPerShift = 1800 / 6;
+const int ledPin = 13;      // the number of the LED pin
+int LastGear;
+int gear;
+int SetNeutPos = 0;
+int G0 = 188;
+int G1 =  0;
+int G2 = 375;
+int G3 = 750;
+int G4 = 1125;
+int G5 = 1500;
+int G6 = 1875;
+int neutral;
+
+
+
+void setup() {
+  Serial.begin(9600);
+  LastGear = EEPROM.read(10);
+  gear =  EEPROM.read(1);
+  if (gear>6)gear=0;
+pinMode(8, OUTPUT);
+digitalWrite(8, HIGH);
+pinMode(9, INPUT_PULLUP);//the positive currect neutral grounds
+  pinMode(down, INPUT_PULLUP);
+  pinMode(up, INPUT_PULLUP);
+  delay(5000);
+
+//Wait for motor to finish initiation routine - If you give commands to motor on power on it may behave irratically
+  Serial.println("X");    //Auto Calibration command, Required only once when using motor for the first time, after running onces parameters are stored in motor controller.
+  delay(5000);            //Wait for 5 Seconds for calibration
+  Serial.println("M255");  //Set maximum speed of motor, useful when using G command for going to specific encoder position.
+  delay(500);              //Allow to store setting
+  Serial.println("D0");  //Set damping - acceleration and decceleration
+  delay(500);
+// Serial.println("E125");  delay(500);  //Set I2C slave address for motor. If more than one motor is to be controlled on I2C bus every motor needs different address which can be set using this command. //Required only once when using motor for the first time, after running onces parameters are stored in motor controller.//Allow to store setting
+}
+
+void loop() {
+//Check for paddle presses
+  upstate = digitalRead(up);
+  downstate = digitalRead(down);
+ 
+//Check If neutral button has been pressed for a time
+
+    if (digitalRead(9)==1)
+    {n++; if (n > 10) {n = 0; neutral = 1; SetNeutPos =0;}} //////NOT IN NEUTRAL
+ 
+   if (digitalRead(9)==0)//////IN NEUTRAL
+    {n++; if (n > 10000) {n = 0; neutral = 0;
+    if (SetNeutPos == 0 ) {Serial.print("P");Serial.println(G0); SetNeutPos =1; gear = 0; }//Set current encoder position as neutral but only do it once, to avoid confising the motors with too much serial data
+    }
+    }  
+
+
+//GearMachine
+switch (gear)
+{ 
+case 0://Neutral
+    if (digitalRead(up) == LOW) {LastGear = gear; gear = 11;  Serial.print("G"); Serial.println(-G1);
+      delay(200);   
+    } break;
+case 1://First
+    if (digitalRead(up) == LOW) {LastGear = gear; gear = 12;  Serial.print("G"); Serial.println(-G2);
+      delay(200); break;
+    }
+    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 10;  Serial.print("G"); Serial.println(-G0);
+      delay(200);
+    } break;
+case 2://Second
+    if (digitalRead(up) == LOW) {LastGear = gear; gear = 13;  Serial.print("G"); Serial.println(-G3);
+      delay(200); break;
+    }
+    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 11;  Serial.print("G"); Serial.println(G1);
+      delay(200);
+    } break;
+case 3://Third
+    if (digitalRead(up) == LOW) {LastGear = gear; gear = 14;  Serial.print("G"); Serial.println(-G4);
+      delay(200); break;
+    }
+    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 12;  Serial.print("G"); Serial.println(-G2);
+      delay(200);
+    } break;
+case 4://Fourth
+    if (digitalRead(up) == LOW) {LastGear = gear; gear = 15;  Serial.print("G"); Serial.println(-G5);
+      delay(200); break;
+    }
+    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 13;  Serial.print("G"); Serial.println(-G3);
+      delay(200);
+    } break;
+case 5://Fith
+    if (digitalRead(up) == LOW) {LastGear = gear; gear = 16;  Serial.print("G"); Serial.println(-G6);
+      delay(200); break;
+    }
+    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 14;  Serial.print("G"); Serial.println(-G4);
+      delay(200);
+    } break;
+case 6://sixth
+    if (digitalRead(down) == LOW) {LastGear = gear; gear = 15;  Serial.print("G"); Serial.println(-G5);
+      delay(200);
+    } break;
+
+//Transition States - Saves gear change to memory - NEXT ADD A CHECK TO SEE IF GEAR HAS CORRECTLY CHANGED, IF NOT REVERT TO LAST GEAR.  1 = Current gear ,  10 = previous gear
+  case 10:
+    gear = 0; EEPROM.write(1, 0); EEPROM.write(10, LastGear);
+    break;
+  case 11:
+    gear = 1; EEPROM.write(1, 1); EEPROM.write(10, LastGear);
+    break;
+  case 12:
+    gear = 2; EEPROM.write(1, 2); EEPROM.write(10, LastGear);
+    break;
+  case 13:
+    gear = 3; EEPROM.write(1, 3); EEPROM.write(10, LastGear);
+    break;
+  case 14:
+    gear = 4; EEPROM.write(1, 4); EEPROM.write(10, LastGear);
+    break;
+  case 15:
+    gear = 5; EEPROM.write(1, 5); EEPROM.write(10, LastGear);
+    break;
+  case 16:
+    gear = 6; EEPROM.write(1, 6); EEPROM.write(10, LastGear);
+    break;
+}//endofgearmachine
+      }//endofloop
