@@ -1,0 +1,6 @@
+ManVelClearpath	KEYWORD1
+disable	KEYWORD1
+enable	KEYWORD1
+getSpeed	KEYWORD1
+readHLFB	KEYWORD1
+attach	KEYWORD1
