@@ -1,6 +1,14 @@
+
 #include <EEPROM.h>
+#include <Arduino.h>
+#include <PulseClearpath.h>
+#include <StepController.h>
+#include <StepClearpath.h>
 int incomingByte;
-long n;
+unsigned long time;
+unsigned long ShiftTime;
+unsigned long OldTime;
+int n;
 unsigned char i;
 int upstate = 0;
 int downstate = 0;
@@ -8,9 +16,8 @@ const int down = 2;
 const int up = 3;
 const int StepPerShift = 1800 / 6;
 const int ledPin = 13;      // the number of the LED pin
-int LastGear;
 int gear;
-int SetNeutPos = 0;
+int bananas = 0;
 int G0 = 188;
 int G1 =  0;
 int G2 = 375;
@@ -19,20 +26,41 @@ int G4 = 1125;
 int G5 = 1500;
 int G6 = 1875;
 int neutral;
-
+int shiftdirection; // This int saves the previous move, used in recovering from a failed shift, 0 = Failedshift  1 = fullshift up    2 = fullshift down    3 = halfshift up    4 = halfshift down
+  StepClearpath X; // initialize a StepClearpath Motor
+  StepController machine(&X); //initialize the controller and pass the reference to the motor
+  gear =  EEPROM.read(1);
+  double FullShift=75000; // distance in Steps - check step/rev in ClearPath MSP config file (1,600 steps/rev)
+  double HalfShift=FullShift/2;
 
 
 void setup() {
-  Serial.begin(9600);
-  LastGear = EEPROM.read(10);
-  gear =  EEPROM.read(1);
+
+    pinMode(2,OUTPUT);  //DEBUG declare pin 2 as output.  Abe, this shows when the arduino is in the ISR
+    Serial.begin(9600);
+    X.attach(8,9,6,4);      //Direction/A is pin 8, Step/B is pin 9, Enable is pin 6, HLFB is pin 4  //JWS: HFLB = high level feedback info coming from motor to arduino
+    X.setMaxVel(100000);  // Set max Velocity.  Parameter can be between 2 and 100,000
+    X.setMaxAccel(2000000);  // Set max Acceleration.  Parameter can be between 4000 and 2,000,000
+    X.enable();  // Enable motor, reset the motor position to 0 //JWS: enable happens automatically per Clearpath (whenever enabled) - no actual arduino code required
+
+    Serial.print("Homing...");      // wait until the command is finished and then 1 more second
+    while(X.readHLFB()) { 
+        Serial.print('.');
+      }
+    
+    Serial.println();
+    Serial.println("Homing Complete");
+    delay(200);
+  
+    machine.Start(249);     // Set up the ISR to constantly check motor position.  PARAMETER MUST BE SET TO 249
+
   if (gear>6)gear=0;
-pinMode(8, OUTPUT);
-digitalWrite(8, HIGH);
-pinMode(9, INPUT_PULLUP);//the positive currect neutral grounds
+  pinMode(8, OUTPUT);
+  digitalWrite(8, HIGH);
+  pinMode(9, INPUT_PULLUP);//the positive currect neutral grounds
   pinMode(down, INPUT_PULLUP);
   pinMode(up, INPUT_PULLUP);
-  delay(5000);
+  delay(3000);
 
 //Wait for motor to finish initiation routine - If you give commands to motor on power on it may behave irratically
   Serial.println("X");    //Auto Calibration command, Required only once when using motor for the first time, after running onces parameters are stored in motor controller.
@@ -44,6 +72,30 @@ pinMode(9, INPUT_PULLUP);//the positive currect neutral grounds
 // Serial.println("E125");  delay(500);  //Set I2C slave address for motor. If more than one motor is to be controlled on I2C bus every motor needs different address which can be set using this command. //Required only once when using motor for the first time, after running onces parameters are stored in motor controller.//Allow to store setting
 }
 
+bool TimeCheck(){//checking if shift took over 3 seconds
+  ShiftTime = millis()-OldTime;
+  if(ShiftTime>=3000){return false;}
+  return true;
+  }
+void ShiftCheck(){//checking if a full shift is completed
+  OldTime = millis();
+  while(X.readHLFB()){ 
+    Serial.print('.');
+    if(TimeCheck()==false){
+        gear = EEPROM.read(1); 
+        Serial.println();Serial.println("Falied Shift - attempting to revert");
+        if(shiftdirection = 1){X.move(-FullShift);}//return to previous gear state if a gear change didnt happen in 3 seconds by doing the inverse of the last move
+        if(shiftdirection = 2){X.move(FullShift);}
+        if(shiftdirection = 3){X.move(-HalfShift);}
+        if(shiftdirection = 4){X.move(HalfShift);}
+        shiftdirection = 0;
+        return;
+        } 
+    }
+  Serial.print("Succsessful shift, taking - ");Serial.print(ShiftTime);Serial.println("ms");
+  return;
+}
+
 void loop() {
 //Check for paddle presses
   upstate = digitalRead(up);
@@ -52,83 +104,87 @@ void loop() {
 //Check If neutral button has been pressed for a time
 
     if (digitalRead(9)==1)
-    {n++; if (n > 10) {n = 0; neutral = 1; SetNeutPos =0;}} //////NOT IN NEUTRAL
+    {n++; if (n > 5000) {n = 0; neutral = 1;Serial.println("NOT IT NEUTRAL");}} 
  
-   if (digitalRead(9)==0)//////IN NEUTRAL
-    {n++; if (n > 10000) {n = 0; neutral = 0;
-    if (SetNeutPos == 0 ) {Serial.print("P");Serial.println(G0); SetNeutPos =1; gear = 0; }//Set current encoder position as neutral but only do it once, to avoid confising the motors with too much serial data
-    }
-    }  
+   if (digitalRead(9)==0)
+    {n++; if (n > 5000) {n = 0; neutral = 0;Serial.println("IN NEUTRAL");}} 
 
 
 //GearMachine
-switch (gear)
-{ 
+switch (gear){ 
 case 0://Neutral
-    if (digitalRead(up) == LOW) {LastGear = gear; gear = 11;  Serial.print("G"); Serial.println(-G1);
-      delay(200);   
+    if (digitalRead(up) == LOW) {gear = 11;  X.move(-HalfShift); shiftdirection =4;
+      delay(20);  
     } break;
 case 1://First
-    if (digitalRead(up) == LOW) {LastGear = gear; gear = 12;  Serial.print("G"); Serial.println(-G2);
-      delay(200); break;
+    if (digitalRead(up) == LOW) {gear = 12;  X.move(FullShift); shiftdirection =1;
+      delay(20); break;
     }
-    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 10;  Serial.print("G"); Serial.println(-G0);
-      delay(200);
+    else if (digitalRead(down) == LOW) {gear = 10;  X.move(HalfShift); shiftdirection =3;
+      delay(20);
     } break;
 case 2://Second
-    if (digitalRead(up) == LOW) {LastGear = gear; gear = 13;  Serial.print("G"); Serial.println(-G3);
-      delay(200); break;
+    if (digitalRead(up) == LOW) {gear = 13;  X.move(FullShift); shiftdirection =1;
+      delay(20); break;
     }
-    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 11;  Serial.print("G"); Serial.println(G1);
-      delay(200);
+    else if (digitalRead(down) == LOW) {gear = 11;  X.move(-FullShift); shiftdirection =2;
+      delay(20);
     } break;
 case 3://Third
-    if (digitalRead(up) == LOW) {LastGear = gear; gear = 14;  Serial.print("G"); Serial.println(-G4);
-      delay(200); break;
+    if (digitalRead(up) == LOW) {gear = 14;  X.move(FullShift); shiftdirection =1;
+      delay(20); break;
     }
-    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 12;  Serial.print("G"); Serial.println(-G2);
-      delay(200);
+    else if (digitalRead(down) == LOW) {gear = 12;  X.move(-FullShift); shiftdirection =2;
+      delay(20);
     } break;
 case 4://Fourth
-    if (digitalRead(up) == LOW) {LastGear = gear; gear = 15;  Serial.print("G"); Serial.println(-G5);
-      delay(200); break;
+    if (digitalRead(up) == LOW) {gear = 15;  X.move(FullShift); shiftdirection =1;
+      delay(20); break;
     }
-    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 13;  Serial.print("G"); Serial.println(-G3);
-      delay(200);
+    else if (digitalRead(down) == LOW) {gear = 13;  X.move(-FullShift); shiftdirection =2;
+      delay(20);
     } break;
 case 5://Fith
-    if (digitalRead(up) == LOW) {LastGear = gear; gear = 16;  Serial.print("G"); Serial.println(-G6);
-      delay(200); break;
+    if (digitalRead(up) == LOW) {gear = 16;  X.move(FullShift); shiftdirection =1;
+      delay(20); break;
     }
-    else if (digitalRead(down) == LOW) {LastGear = gear; gear = 14;  Serial.print("G"); Serial.println(-G4);
-      delay(200);
+    else if (digitalRead(down) == LOW) {gear = 14;  X.move(-FullShift); shiftdirection =2;
+      delay(20);
     } break;
 case 6://sixth
-    if (digitalRead(down) == LOW) {LastGear = gear; gear = 15;  Serial.print("G"); Serial.println(-G5);
-      delay(200);
+    if (digitalRead(down) == LOW) {gear = 15;  X.move(-FullShift); shiftdirection =2;
+      delay(20);
     } break;
 
-//Transition States - Saves gear change to memory - NEXT ADD A CHECK TO SEE IF GEAR HAS CORRECTLY CHANGED, IF NOT REVERT TO LAST GEAR.  1 = Current gear ,  10 = previous gear
+//Transition States - Saves gear change to memory - ShiftCheck() checks for a full shift, if failed reverts to last gear.
   case 10:
-    gear = 0; EEPROM.write(1, 0); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;} //If a failed shift happened, break before saving new gear to memmory (this may never be called but it feels safe, FSM scare me)
+    gear = 0; EEPROM.write(1, 0);
     break;
   case 11:
-    gear = 1; EEPROM.write(1, 1); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;}
+    gear = 1; EEPROM.write(1, 1);
     break;
   case 12:
-    gear = 2; EEPROM.write(1, 2); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;}    
+    gear = 2; EEPROM.write(1, 2);
     break;
   case 13:
-    gear = 3; EEPROM.write(1, 3); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;}    
+    gear = 3; EEPROM.write(1, 3);
     break;
   case 14:
-    gear = 4; EEPROM.write(1, 4); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;}    
+    gear = 4; EEPROM.write(1, 4);
     break;
   case 15:
-    gear = 5; EEPROM.write(1, 5); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;}    
+    gear = 5; EEPROM.write(1, 5);
     break;
   case 16:
-    gear = 6; EEPROM.write(1, 6); EEPROM.write(10, LastGear);
+    ShiftCheck(); if (shiftdirection == 0){break;}    
+    gear = 6; EEPROM.write(1, 6);
     break;
 }//endofgearmachine
       }//endofloop
+
